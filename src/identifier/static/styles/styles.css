@@ -1,0 +1,64 @@
+
+.analysis {
+    display: flex;
+    flex-direction: column;
+    border: solid #00000042;
+    width: fit-content;
+    margin: 10px;
+    padding: 8px 32px;
+    gap: 10px;
+}
+
+.graph-video-container {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
+.table-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+video {
+    width: 532px;
+}
+
+.rgraph_domtext_wrapper{
+    z-index: -1;
+}
+
+table{
+    display: block;
+    z-index: -1;
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+th, td{
+    padding: 10px 20px;
+    border: 1px solid #000;
+    text-align: center;
+}
+
+.match{
+    font-size: 24px;
+    animation: color-change 2s infinite;
+}
+  
+@keyframes color-change{
+0% { color: rgb(0 255 0); }
+50% { color:rgb(35 130 35); }
+100% { color: rgb(0 255 0); }
+}
+
+@-webkit-keyframes animatetop {
+    from {top:-300px; opacity:0} 
+    to {top:0; opacity:1}
+}
+
+@keyframes animatetop {
+    from {top:-300px; opacity:0}
+    to {top:0; opacity:1}
+}
