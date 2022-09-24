@@ -15,15 +15,14 @@ def run(interface, cli, window_width, k, pearson_threshold, full_cdn_search):
 
     identification_db = db.IdentificationDB(window_width, k)
 
-    with console.status("Identifier running (CTRL-C to quit)...", 
+    with console.status("Identifier running (CTRL-C to quit)...",
             spinner='circle'):
 
         streams = {}
         capture_filter = ('src ' + ' or src '.join(network.get_svtplay_ips(
             full_cdn_search)) + ' and greater 0')
-        packet_analyzer = network.get_packet_analyzer(capture_filter, 
+        packet_analyzer = network.get_packet_analyzer(capture_filter,
             interface)
-        
         try:
             for packet in iter(packet_analyzer.stdout.readline, ''):
                 src, dst, time, size = network.format_packet(packet)
@@ -34,24 +33,24 @@ def run(interface, cli, window_width, k, pearson_threshold, full_cdn_search):
                     init_segment = size
                     window = deque(maxlen=window_width)
                     identified = False
-                    streams[stream] = [init_time, last_active, 
+                    streams[stream] = [init_time, last_active,
                         init_segment, window, identified]
                     continue
-                
+
                 init_time, last_active, segment, window, \
                     identified = streams[stream]
 
                 # Real-time segmenting and matching
                 if time - last_active > SEGMENT_TIME_THRESHOLD:
 
-                    captured_segment = (round(segment / TLS_OVERHEAD) 
-                        - HTTP_HEADERS)
+                    captured_segment = (round(segment / TLS_OVERHEAD)
+                                        - HTTP_HEADERS)
 
                     if MIN_SEGMENT_SIZE < captured_segment < MAX_SEGMENT_SIZE:
-                        
+
                         window.append(captured_segment)
                         time_elapsed = round(last_active-init_time, 1)
-                        data = {'IP src': src, 'IP dst': dst, 
+                        data = {'IP src': src, 'IP dst': dst,
                             'Elapsed': time_elapsed,
                             'Captured segment': captured_segment,
                             'Match': []}
@@ -62,12 +61,12 @@ def run(interface, cli, window_width, k, pearson_threshold, full_cdn_search):
                             data['Match'] = match_or_empty
 
                         if cli:
-                            format.cli_print(data, 
+                            format.cli_print(data,
                                 list(streams.keys()).index(stream)+1)
                         elif not identified:
                             if data['Match']:
                                 streams[stream][4] = True
-                            requests.post('http://localhost:5000', json=data)                
+                            requests.post('http://localhost:5000', json=data)
 
                     # Start building new segment
                     streams[stream][2] = 0
@@ -84,13 +83,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Detects and identifies HTTPS " +
             "encrypted videos from SVT Play.")
-    parser.add_argument("-i", "--interface", 
+    parser.add_argument("-i", "--interface",
         help="network interface to run identifier on",
         required=True)
     parser.add_argument('--full-cdn-search',
         action=argparse.BooleanOptionalAction,
         help="")
-    parser.add_argument('--cli', 
+    parser.add_argument('--cli',
         action=argparse.BooleanOptionalAction,
         help="show output in the terminal instead of web interface")
     parser.add_argument('-w', "--window-width",

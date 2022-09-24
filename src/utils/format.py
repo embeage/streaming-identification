@@ -3,13 +3,13 @@ import datetime
 import math
 
 def convert_size(size_bytes):
-   if size_bytes == 0:
-       return "0B"
-   size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-   i = int(math.floor(math.log(size_bytes, 1024)))
-   p = math.pow(1024, i)
-   s = round(size_bytes / p, 2)
-   return "%s %s" % (s, size_name[i])
+    if size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {size_name[i]}"
 
 def timestamp_to_sec(timestamp: str) -> float:
     h, m, s = timestamp.split(':')
@@ -31,9 +31,10 @@ def cli_print(data, stream_num):
         f":right_arrow: {segment} [b]B[/b] :right_arrow: {dst} ")
 
     if data['Match']:
-        format_str += (f":white_heavy_check_mark: " +
-            f"[green]{data['Match'][0]} [/green] :watch: " +
-            f"{datetime.timedelta(seconds=int(data['Match'][5][:-1]))}")
+        for match in data['Match']:
+            format_str += (f":white_heavy_check_mark: " +
+                f"[green]{match['name']} [/green] :watch: " +
+                f"{datetime.timedelta(seconds=int(match['time']))} ")
     else:
         format_str += f":magnifying_glass_tilted_left:"
 

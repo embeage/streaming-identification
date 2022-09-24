@@ -4,10 +4,10 @@ import sklearn.neighbors
 import scipy
 import numpy as np
 import csv
-import os
+from os import path
 
 class IdentificationDB:
-    """Instantiation of this class loads the segments db and creates 
+    """Instantiation of this class loads the fingerprint db and creates
     the kd tree. Call the identify function with a captured window
     to determine a match.
     """
@@ -15,103 +15,105 @@ class IdentificationDB:
 
         self._window_width = window_width
         self._k = k_dimension
-
-        self._video_segments, self._ids = (csv_db if csv_db is not None 
-            else load_csv_db())
-
+        self._videos = csv_db if csv_db is not None else load_csv_db()
         self._kd_tree = self._kd_tree_build()
 
     def _kd_tree_build(self):
-        """Creates all k-d keys for all videos and their segments, maps
-        each tree index to its corresponding video name and window 
-        index and builds the k-d tree with all keys.
+        """Creates all k-d keys for all videos and their fingerprints, maps
+        each tree index to its corresponding video id, fingerprint index and
+        window index and builds the k-d tree with all keys.
         """
-        with (console.status(f"Creating {self._k}-dimensional keys...") 
-                as status):
-            video_keys = get_kd_keys(self._video_segments, 
-                self._window_width, self._k)
-            
-            self.tree_index_to_window = {}  
+        with (console.status(f"Creating {self._k}-dimensional keys...")
+              as status):
 
-            all_keys = []  
+            self.tree_index_to_window = {}
+            keys = []
+            i = 0
+            for video_id, video_data in self._videos.items():
+                for f_i, fingerprint in enumerate(video_data['fingerprints']):
+                    if len(fingerprint) < self._window_width:
+                        continue
+                    fingerprint_keys = get_kd_keys(
+                        fingerprint, self._window_width, self._k)
+                    for k_i, fingerprint_key in enumerate(fingerprint_keys):
+                        keys.append(fingerprint_key)
+                        self.tree_index_to_window[i] = (video_id, f_i, k_i)
+                        i += 1
 
-            for video, keys in video_keys.items():
-                for i in range(0, len(keys)):
-                    window_index = i
-                    tree_index = len(all_keys)
-                    all_keys.append(keys[i])
-                    self.tree_index_to_window[tree_index] = (video, 
-                        window_index)
+            console.log(f"{len(keys)} keys created")
 
-            console.log(f"{len(all_keys)} keys created")
-
-            status.update(f"Building k-d tree, give this a moment...")
-            kd_tree = sklearn.neighbors.KDTree(all_keys, leaf_size=400)
-            console.log("[bold green]K-d tree[/bold green] " +
-                f":deciduous_tree: built successfully ")
+            status.update("Building k-d tree, give this a moment...")
+            kd_keys = np.zeros(shape=(len(keys), self._k))
+            for i, key in enumerate(keys):
+                kd_keys[i] = key
+            kd_tree = sklearn.neighbors.KDTree(kd_keys, leaf_size=400)
+            console.log("[bold green]K-d tree[/bold green] "
+                        ":deciduous_tree: built successfully ")
 
         return kd_tree
 
-    def _get_nearest_neighbors(self, key, neighbor_amount=3):
-        """Returns nearest neighbors in the where each neighbor 
-        is on the form (video_metadata, window_index).
+    def _get_nearest_neighbors(self, key, neighbor_amount=5):
+        """Returns nearest neighbors in the where each neighbor
+        is on the form (video_id, fingerprint_index, window_index).
         """
 
-        tree_indices = self._kd_tree.query([key], k=neighbor_amount, 
+        tree_indices = self._kd_tree.query([key], k=neighbor_amount,
             return_distance=False)[0]
 
         # Use tree_indices to get the neighbors
         return [self.tree_index_to_window[index] for index in tree_indices]
 
-    def _determine_match(self, captured_window, nearest_neighbors, 
+    def _determine_match(self, captured_window, nearest_neighbors,
             pearson_threshold):
 
+        matches = []
         for neighbor in nearest_neighbors:
-            neighbor_video, neighbor_window_index = neighbor
+            video_id, fingerprint_index, window_index = neighbor
 
-            neighbor_segments = self._video_segments[neighbor_video]
+            fingerprint = (self._videos[video_id]['fingerprints']
+                           [fingerprint_index])
 
             # Use index to extract window from segments
-            neighbor_window = (neighbor_segments[neighbor_window_index : 
-                neighbor_window_index + self._window_width])
+            neighbor_window = (fingerprint[window_index : window_index
+                                           + self._window_width])
 
-            pearsons_r, _ = scipy.stats.pearsonr(
-                captured_window, neighbor_window)
-            
+            pearsons_r, _ = scipy.stats.pearsonr(captured_window,
+                                                 neighbor_window)
+
             if pearsons_r > pearson_threshold:
-                time = get_video_time(neighbor, len(neighbor_segments),
-                    self._window_width)      
-                match = neighbor_video + (time, pearsons_r)
-                return match
+                name = self._videos[video_id]['name']
+                duration = self._videos[video_id]['duration']
+                segment_length = self._videos[video_id]['segment_length']
+                time = video_time(window_index, len(fingerprint), duration,
+                                      segment_length, self._window_width)
+                matches.append({
+                    'id': video_id,
+                    'name': name,
+                    'time': time,
+                    'pearsons_r': pearsons_r
+                    })
 
-        return []
+        return matches
 
     def identify(self, captured_window, pearson_threshold=0.99):
         kd_key = create_kd_key(captured_window, self._window_width, self._k)
         nearest_neighbors = self._get_nearest_neighbors(kd_key)
-
-        match_or_empty = self._determine_match(captured_window, 
+        match_or_empty = self._determine_match(captured_window,
             nearest_neighbors, pearson_threshold)
         return match_or_empty
 
     @property
-    def ids(self):
-        return self._ids
+    def videos(self):
+        return self._videos
 
-    @property
-    def video_segments(self):
-        return self._video_segments
+def video_time(window_index, fingerprint_length, video_duration,
+                   segment_length, window_width, buffer_time=60):
+    factor = window_index / fingerprint_length
+    time = (round(factor * video_duration)
+            + segment_length*window_width - buffer_time)
+    return time
 
-def get_video_time(video_window: int, n_segments: int, window_width: int, 
-        segment_time: int=4, buffer_time: int=60) -> str:
-    video_metadata, video_window_index = video_window
-    total_time = int(video_metadata[1][:-1])
-    factor = video_window_index / n_segments
-    time = (round(factor * total_time) + 
-        segment_time*window_width - buffer_time) 
-    return f'{time}s'
-
-def create_kd_key(window, window_width, k):
+def create_kd_key(window: deque, window_width, k):
 
     if window_width == k:
         return np.array(window)
@@ -120,9 +122,7 @@ def create_kd_key(window, window_width, k):
     kd_key = np.reshape(window, (k, slice_width)).sum(axis=1)
     return kd_key
 
-def get_kd_keys(video_segments: dict, window_width: int, 
-        k: int) -> dict:
-
+def get_kd_keys(fingerprint, window_width, k):
     if window_width < k:
         raise ValueError("window width has to be larger or equal to the " +
             "specified dimension!")
@@ -131,31 +131,35 @@ def get_kd_keys(video_segments: dict, window_width: int,
         raise ValueError("window width has to be divisible by the " +
             "specified dimension!")
 
-    video_keys = {}
-    for video, segments in video_segments.items():
-        if window_width > len(segments):
-            continue
-        keys = []
-        sliding_window = deque(maxlen=window_width)
-        for segment in segments:
-            sliding_window.append(segment)
-            if len(sliding_window) == window_width:
-                keys.append(create_kd_key(sliding_window, 
-                    window_width, k))
-        video_keys[video] = keys
-    return video_keys
+    sliding_window = deque(maxlen=window_width)
+    keys = []
+    for segment_size in fingerprint:
+        sliding_window.append(segment_size)
+        if len(sliding_window) == window_width:
+            keys.append(create_kd_key(sliding_window, window_width, k))
+    return keys
 
 def load_csv_db():
     with console.status("Loading database..."):
-        here = os.path.dirname(os.path.abspath(__file__))
-        video_segments, ids = {}, set()
-        with open(os.path.join(here, 'svtplay_db.csv'), 
-            encoding='utf8') as file:
+        file_path = path.join(path.dirname(path.abspath(__file__)),
+                              'svtplay_db.csv')
+        if not path.exists(file_path):
+            file_path = file_path.replace('.csv', '_intl.csv')
+        with open(file_path, encoding='utf8') as file:
+            videos = {}
             reader = csv.reader(file)
             for row in reader:
-                ids.add(row[2])
-                video = tuple(row[:5])
-                segments = list(map(int, row[5:]))
-                video_segments[video] = segments
-        console.log(f"{len(video_segments)} videos loaded")
-        return video_segments, ids
+                video_id = row[0]
+                name = row[1]
+                duration = int(row[2])
+                segment_length = float(row[3])
+                fingerprints = tuple(tuple(map(int, row.split(',')))
+                                     for row in row[4:])
+                videos[video_id] = {
+                    'name': name,
+                    'duration': duration,
+                    'segment_length': segment_length,
+                    'fingerprints': fingerprints
+                }
+        console.log(f"{len(videos)} videos loaded")
+        return videos

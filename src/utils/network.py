@@ -3,8 +3,8 @@ import socket
 import platform
 from utils import format
 
-def get_packet_analyzer(capture_filter, interface, 
-        tshark_dir='C:\Program Files\Wireshark\\'):
+def get_packet_analyzer(capture_filter, interface,
+                        tshark_dir='C:\Program Files\Wireshark\\'):
 
     if platform.system() == 'Windows':
         tshark = subprocess.Popen(
@@ -30,7 +30,7 @@ def get_packet_analyzer(capture_filter, interface,
                 "tcpdump",
                 "-i" + interface,
                 "-q",
-                "-n", 
+                "-n",
                 "-ttttt",
                 capture_filter
             ),
@@ -40,7 +40,7 @@ def get_packet_analyzer(capture_filter, interface,
         )
         return tcpdump
 
-def _get_cdn_ips(name, start, end, char_start, char_end):
+def get_cdn_ips(name, start, end, char_start, char_end):
     cdn_ips = set()
     for i in range(start, end + 1):
         if char_end:
@@ -49,18 +49,18 @@ def _get_cdn_ips(name, start, end, char_start, char_end):
                         443, family=socket.AF_INET):
                     cdn_ips.add(ip[4][0])
         else:
-            for ip in socket.getaddrinfo(name.format(num=i), 
+            for ip in socket.getaddrinfo(name.format(num=i),
                     443, family=socket.AF_INET):
                 cdn_ips.add(ip[4][0])
     return cdn_ips
 
 def get_svtplay_ips(full_cdn_search=False):
 
-    svtplay_ips = _get_cdn_ips('ed{num}.cdn.svt.se', 0, 9, 0, 0)
+    svtplay_ips = get_cdn_ips('ed{num}.cdn.svt.se', 0, 12, 0, 0)
     if full_cdn_search:
         svtplay_ips |= (
-            _get_cdn_ips('svt-vod-{num}.secure.footprint.net', 1, 10, 0, 0) |
-            _get_cdn_ips('svt-vod-{num}{char}.akamaized.net', 1, 9, 97, 116))
+            get_cdn_ips('svt-vod-{num}.secure.footprint.net', 1, 10, 0, 0) |
+            get_cdn_ips('svt-vod-{num}{char}.akamaized.net', 1, 9, 97, 116))
     return svtplay_ips
 
 def format_packet(packet):

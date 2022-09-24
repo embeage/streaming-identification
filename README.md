@@ -2,7 +2,7 @@
 
 The identifier can identify HTTPS encrypted videos streamed using DASH, given a dataset of segment sizes. A demo of the running application can be seen [here](https://www.youtube.com/watch?v=8zF0GnYKhFc).
 
-Our dataset contains videos from SVT Play. The data was scraped using web crawling, see `src/web_scrapers`.
+Our dataset contains videos from SVT Play and is automatically kept up-to-date, see https://github.com/embeage/dataset-updater.
 
 ## Getting Started
 
@@ -25,11 +25,11 @@ Our dataset contains videos from SVT Play. The data was scraped using web crawli
    python -m pip install -r requirements.txt
    ```
 
-4. Download the SVT Play DB and place it inside `src/identifier`
-   [https://drive.google.com/file/d/13ez6D9axWs-F-0xiHMnl91VI_pqr-grf/view?usp=sharing](https://drive.google.com/file/d/13ez6D9axWs-F-0xiHMnl91VI_pqr-grf/view?usp=sharing)
+4. Download the SVT Play DB and place it inside `src/identifier`, select the international version if you are outside Sweden
+   [svtplay_db.csv](https://drive.google.com/uc?id=1W9iS5sMaS5AkBCT4Zm5OWTZqegFcub57&export=download)
+   [svtplay_db_intl.csv](https://drive.google.com/uc?id=1d5hUY0lUJeqv95mNzFkU8oloq1gMQFXu&export=download)
 
-5. (Windows users only) Install Wireshark
-   [https://www.wireshark.org/download.html](https://www.wireshark.org/download.html)
+5. If you are on Linux you need to give tcpdump user level permissions. See https://askubuntu.com/a/632189 for Debian. Installing Wireshark is enough for Windows and Mac [https://www.wireshark.org/download.html](https://www.wireshark.org/download.html)
 
 ## Usage
 
