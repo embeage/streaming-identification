@@ -1,17 +1,17 @@
-var evtSource = new EventSource('http://localhost:5000/subscribe');
+var evtSource = new EventSource('http://127.0.0.1:5000/subscribe');
 
 var streams = [];
 
 const RED = '#FF0000';
 const GREEN = '#39ce00';
-const TIMESTAMP = 3;
+const TIMESTAMP = 6;
 const VIDEOLENGTH = 2;
 const MAX_SEGMENTS = 15;
 const UNIT = 1000;
 const UNIT_STRING = 'kB';
 const FACTOR = 5;
 const YSCALE = UNIT*FACTOR
-const TABLE_COLUMNS = 4;
+const TABLE_COLUMNS = 7;
 const BUFFER_SECONDS = 60;
 
 evtSource.onmessage = async function(e) {
@@ -24,8 +24,11 @@ function analyze(json_data) {
     const src = data["IP src"];
     const dst = data["IP dst"];
     const captured_segment = data["Captured segment"];
-    // Todo: handle all matches not just the first one
-    const match = data["Match"].length != 0 ? data["Match"][0] : [];
+    const match = data["Match"];
+    const match2 = data["Match2"];
+    const match3 = data["Match3"];
+    const best_title = data["Best match"];
+    const proba = data["Probability"];
     
     let cid = idHash(src, dst);
     let stream = streams.find(({cid : n}) => n == cid);
@@ -34,8 +37,8 @@ function analyze(json_data) {
                     'color:blue; font:15px bold');
         stream = createAnalysis(cid, src, dst);
     }
-    updateGraph(stream, captured_segment, match);
-    updateTable(stream, match);
+    updateGraph(stream, captured_segment, match, proba);
+    updateTable(stream, match, match2, match3, best_title, proba);
     updateVideo(stream, match);
 }
 
@@ -45,16 +48,16 @@ function updateVideo(stream, match) {
     const playing = stream['playing'];
     let player = stream['player'];
     
-    if((Object.keys(match).length == 0) && playing){
+    if((match.length == 0) && playing){
         console.info(`%cIdentification lost. CID: ${cid}`, 
                     'color:Red; font:15px bold');
         stream['player'].pause();
         stream['playing'] = false;
-    } else if((Object.keys(match).length != 0) && (!playing || player.isPaused())) {
+    } else if((match.length != 0) && (!playing || player.isPaused())) {
         console.info(`%cIdentification succeeded. CID: ${cid}`,
                     'color:LimeGreen; font:15px bold');
-        const svt_id = match['id'];
-        const tstamp = match['time'];
+        const svt_id = match[2];
+        const tstamp = match[5];
 
         // Initialization needs a manifest URL
         fetchManifest(svt_id).then(manifest => {
@@ -69,7 +72,7 @@ function updateVideo(stream, match) {
     }
 }
 
-function updateGraph(stream, data, match) {
+function updateGraph(stream, data, match, proba) {
 
     let graph = stream['graph'];
 
@@ -84,12 +87,12 @@ function updateGraph(stream, data, match) {
     if(graph.data.length > MAX_SEGMENTS)
         graph.data = RGraph.arrayShift(graph.data);
 
-    Object.keys(match).length != 0 ? graph.set('colors', [GREEN]) : graph.set('colors', [RED]);
+    (proba > 75) ? graph.set('colors', [GREEN]) : graph.set('colors', [RED]);
 
     RGraph.redraw();
 }
 
-function updateTable(stream, match) {
+function updateTable(stream, match, match2, match3, best_title, proba) {
 
     let table = stream['table'];
 
@@ -99,12 +102,16 @@ function updateTable(stream, match) {
     let new_thead = document.createElement('thead');
     new_thead.classList.add('video-type');
 
-    if(Object.keys(match).length != 0) {
-        new_thead.append(setTableHead('Identification succeeded'));
+    if(proba > 75) {
+        new_thead.append(setTableHead('Identification succeeded: ' + proba + '%'));
         new_tbody.append(setTableRows(match));
         new_thead.classList.add('match');
-    } else
+    } else{
         new_thead.append(setTableHead('NaN'));
+        new_tbody.append(setTableRows(match));
+        new_tbody.append(setTableRows(match2));
+        new_tbody.append(setTableRows(match3));
+    }
 
     table.replaceChild(new_thead, old_thead);
     table.replaceChild(new_tbody, old_tbody);
@@ -241,18 +248,24 @@ function createTable(cid) {
 
     let row_1 = document.createElement('tr');
     let heading_1 = document.createElement('th');
-    heading_1.innerHTML = "SVT id";
+    heading_1.innerHTML = "Video";
     heading_1.classList.add('col1');
     let heading_2 = document.createElement('th');
-    heading_2.innerHTML = "Name";
+    heading_2.innerHTML = "SVT id";
     let heading_3 = document.createElement('th');
-    heading_3.innerHTML = "Timestamp";
+    heading_3.innerHTML = "Bandwidth";
     let heading_4 = document.createElement('th');
-    heading_4.innerHTML = "Pearson's r";
+    heading_4.innerHTML = "Quality";
+    let heading_5 = document.createElement('th');
+    heading_5.innerHTML = "Timestamp";
+    let heading_6 = document.createElement('th');
+    heading_6.innerHTML = "Probability";
     row_1.appendChild(heading_1);
     row_1.appendChild(heading_2);
     row_1.appendChild(heading_3);
     row_1.appendChild(heading_4);
+    row_1.appendChild(heading_5);
+    row_1.appendChild(heading_6);
     status_thead.appendChild(row_1);
 
     document.getElementById('table-container' + cid).appendChild(table);
@@ -265,15 +278,19 @@ function setTableRows(video_info) {
     let row = document.createElement('tr');
     let column = 1;
 
-    for (const piece in video_info) {
+    for(const piece of video_info) {
+        if(column == VIDEOLENGTH){
+            column++;
+            continue;
+        }
 
         let row_data = document.createElement('td');
 
         // Convert to HH:MM:SS
         if(column == TIMESTAMP)
-            row_data.innerHTML = timestamp(video_info[piece]);
+            row_data.innerHTML = timestamp(piece);
         else
-            row_data.innerHTML = video_info[piece];
+            row_data.innerHTML = piece;
 
         row_data.classList.add('column' + column);
         row.appendChild(row_data);

@@ -12,7 +12,7 @@ FAST_MODE = True
 
 
 
-def plot_time_test(results: list[float], database_size : list[int]) -> None:
+def plot_time_test(results, database_size) -> None:
     """
     Function used to plot results from run_buildtime_test
     it saves the result in ./time_test.png
@@ -46,13 +46,13 @@ def save_result(start : float, end : float, size : int, fast_mode : bool) -> Non
     """
     mode = "slow"
     if fast_mode: mode="fast"
-    with (open(f'times_{mode}_SVM.csv', 'a', newline='', encoding='utf8') as csv_file):
+    with open(f'times_{mode}_SVM.csv', 'a', newline='', encoding='utf8') as csv_file:
                     writer = csv.writer(csv_file)
                     writer.writerow([size, (end-start)])
 
 
 
-def run_buildtime_test(sizes: list[int] = [10], fast_mode: bool = False) -> None:
+def run_buildtime_test(sizes, fast_mode = False) -> None:
     """
     Function to calculate the time taken to build and train a SVM with X number of fingerprints.
 

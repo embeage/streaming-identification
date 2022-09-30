@@ -1,4 +1,48 @@
-from utils.console import console, console_progress
+import sys
+from rich.console import Console
+
+console = Console()
+
+def console_progress(count, total, status=''):
+    # from: https://gist.github.com/vladignatyev/06860ec2040cb497f0f3
+    bar_len = 60
+    filled_len = int(round(bar_len * count / float(total)))
+
+    percents = round(100.0 * count / float(total), 1)
+    bar = '=' * filled_len + '-' * (bar_len - filled_len)
+
+    sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', status))
+    sys.stdout.flush()
+
+def load(filename, convert=float):
+    with open(filename, "r") as file:
+        return [convert(line) for line in file.readlines()]
+
+def splitline(line, convert):
+    return list(map(convert, (s for s in line.strip().split(",") if s and s != '\n')))
+
+def loadcsv(filename, convert=float):
+    return load(filename, lambda line: splitline(line, convert) )
+
+def load(filename, convert=float):
+    with open(filename, "r") as file:
+        return [convert(line) for line in file.readlines()]
+
+def splitline(line, convert):
+    return list(map(convert, (s for s in line.strip().split(",") if s and s != '\n')))
+
+def loadcsv(filename, convert=float):
+    return load(filename, lambda line: splitline(line, convert) )
+
+def write(titles):
+    with open("titles.csv","w") as f:
+        sv_writer = csv.writer(f, delimiter=',')
+        for title in titles:
+            print(title)
+            a = sv_writer.writerow(title)
+
+
+
 from collections import deque
 import sklearn.neighbors
 import scipy
@@ -9,10 +53,11 @@ import os
 DEFAULT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(DEFAULT_DIR, 'svtplay_db.csv')
 DEFAULT_DB_BIN = os.path.join(DEFAULT_DIR, 'svtplay_db.bin')
-DEFAULT_PEARSON_THRESHOLD = 0.999999999
 
-### pickle utils
+###
 import pickle
+
+#video_keys_file = os.path.join(here, "videos_db.bin")
 
 def savedump(myobj, filename):
     with open(filename,'wb') as f:
@@ -20,7 +65,8 @@ def savedump(myobj, filename):
         
 def loaddump(filename):
     with open(filename,'rb') as f:
-        return pickle.load(f)    
+        return pickle.load(f)
+    
 ###
 
 class IdentificationDB:
@@ -52,12 +98,6 @@ class IdentificationDB:
             
         console.log(f"{len(self._video_infos)} videos loaded")
 
-    def _create_kd_key(self, window):
-        if self._w == self._k:
-            return np.array(window)
-        # Weird enough but there was a bug here!
-        return np.reshape(window, (self._k, self._w // self._k)).sum(axis=1)
-
     def _compute_kd_keys(self):        
         if self._w < self._k:
             raise ValueError("window width has to be larger or equal to the specified dimension!")
@@ -85,7 +125,7 @@ class IdentificationDB:
             for window_index in range(len(fingerprint)):
                 sliding_window.append(fingerprint[window_index])
                 if len(sliding_window) == self._w:
-                    self._all_keys[key_index] = self._create_kd_key(sliding_window)
+                    self._all_keys[key_index] = create_kd_key(sliding_window,  self._w, self._k)
                     self._video_indexes[key_index] = video_index
                     self._window_indexes[key_index] = window_index+1-self._w
                     key_index += 1
@@ -128,14 +168,9 @@ class IdentificationDB:
         # Use tree_indices to get the neighbors
         return [(self._video_indexes[index], self._window_indexes[index]) for index in neighbors]
 
-    def _get_video_time(self, video_index, window_index, n_segments,
-                   segment_time=4, buffer_time=60):
-        total_time = int(self._video_infos[video_index][1][:-1])
-        factor = window_index / n_segments
-        time = round(factor * total_time) + segment_time*self._w - buffer_time
-        return f'{time}s'
-    
     def _determine_match(self, captured_window, nearest_neighbors, pearson_threshold):
+        print(captured_window, nearest_neighbors)
+        
         for neighbor in nearest_neighbors:
             video_index, window_index = neighbor
             neighbor_segments = self._segments[video_index]
@@ -144,36 +179,23 @@ class IdentificationDB:
             neighbor_window = neighbor_segments[window_index: window_index+self._w]
             if len(neighbor_window) == self._w:
                 pearsons_r, _ = scipy.stats.pearsonr(captured_window, neighbor_window)
-
-                if pearsons_r > pearson_threshold:
-                    time = self._get_video_time(video_index, window_index, len(neighbor_segments))      
-                    match = self._video_infos[video_index] + (time, pearsons_r)
-                    return match
+                print(captured_window, neighbor_window, scipy.stats.pearsonr(captured_window, neighbor_window))
+            
+            if pearsons_r > pearson_threshold:
+                time = get_video_time(self._video_infos[video_index], window_index,
+                                      len(neighbor_segments), self._w)      
+                match = self._video_infos[video_index] + (time, pearsons_r)
+                return match
 
         return []
 
-    def identify(self, captured_window, pearson_threshold=DEFAULT_PEARSON_THRESHOLD):
-        kd_key = self._create_kd_key(captured_window)
+    def identify(self, captured_window, pearson_threshold=0.99):
+        kd_key = create_kd_key(captured_window, self._w, self._k)
         nearest_neighbors = self._get_nearest_neighbors(kd_key)
-        return self._determine_match(captured_window, nearest_neighbors, pearson_threshold)
 
-    def best_matches(self, captured_window, nb_neighbors=10):
-        kd_key = self._create_kd_key(captured_window)
-        nearest_neighbors = self._get_nearest_neighbors(kd_key, neighbor_amount=nb_neighbors)
-        matches = []
-        for neighbor in nearest_neighbors:
-            video_index, window_index = neighbor
-            neighbor_segments = self._segments[video_index]
-
-            # Use index to extract window from segments
-            neighbor_window = neighbor_segments[window_index: window_index+self._w]
-            if len(neighbor_window) == self._w:
-                pearsons_r, _ = scipy.stats.pearsonr(captured_window, neighbor_window)
-                time = self._get_video_time(video_index, window_index, len(neighbor_segments))      
-                matches.append((self._video_infos[video_index] + (time, pearsons_r),
-                                neighbor_window))
-        return matches
-            
+        match_or_empty = self._determine_match(captured_window,
+                                               nearest_neighbors, pearson_threshold)
+        return match_or_empty
 
     @property
     def ids(self):
@@ -183,6 +205,23 @@ class IdentificationDB:
     def video_segments(self):
         return self._segments
 
+## utils
 
-def compute_pearson(captured_window, neighbor_window):
-    return scipy.stats.pearsonr(captured_window, neighbor_window)[0]
+def get_video_time(video_metadata, window_index, n_segments, window_width,
+                   segment_time=4, buffer_time=60):
+    total_time = int(video_metadata[1][:-1])
+    factor = window_index / n_segments
+    time = (round(factor * total_time) + segment_time*window_width - buffer_time) 
+    return f'{time}s'
+
+def create_kd_key(window, window_width, k):
+    if window_width == k:
+        return np.array(window)
+
+    slice_width = window_width // k
+    kd_key = np.reshape(window, (k, slice_width)).sum(axis=1)
+    return kd_key
+
+
+
+
